@@ -1158,6 +1158,11 @@ enum Operation {
     debug,
     debuguntil,
 };
+
+std::string skill_description(const Cards& cards, const SkillSpec& s);
+
+//------------------------------------------------------------------------------
+// print possible Battle Ground Effects (BGE) to console
 //------------------------------------------------------------------------------
 extern void(*skill_table[Skill::num_skills])(Field*, CardStatus* src_status, const SkillSpec&);
 void print_available_effects()
@@ -1178,6 +1183,10 @@ void print_available_effects()
         "  HaltedOrders\n"
         ;
 }
+
+//------------------------------------------------------------------------------
+// print available parameter list to console
+//------------------------------------------------------------------------------
 void usage(int argc, char** argv)
 {
     std::cout << "Tyrant Unleashed Optimizer (TUO) " << TYRANT_OPTIMIZER_VERSION << "\n"
@@ -1219,21 +1228,29 @@ void usage(int argc, char** argv)
         ;
 }
 
-std::string skill_description(const Cards& cards, const SkillSpec& s);
 
+//------------------------------------------------------------------------------
+// main function
+// - take over parameters (param count, param values) from user input
+// - ??
+//------------------------------------------------------------------------------
 int main(int argc, char** argv)
 {
-    if (argc == 2 && strcmp(argv[1], "-version") == 0)
+    // only version info requested
+    // -> print out version of TUO
+	if (argc == 2 && strcmp(argv[1], "-version") == 0)
     {
         std::cout << "Tyrant Unleashed Optimizer " << TYRANT_OPTIMIZER_VERSION << std::endl;
         return 0;
     }
+	// error: must provide at least 2 parameters
     if (argc <= 2)
     {
         usage(argc, argv);
         return 0;
     }
 
+	//init TUO
     unsigned opt_num_threads(4);
     DeckStrategy::DeckStrategy opt_your_strategy(DeckStrategy::random);
     DeckStrategy::DeckStrategy opt_enemy_strategy(DeckStrategy::random);
@@ -1272,7 +1289,9 @@ int main(int argc, char** argv)
             hash_to_ids = hash_to_ids_ddd_b64;
             encode_deck = encode_deck_ddd_b64;
         }
-        // Base Game Mode
+        // Base Game Mode 
+		// fight (default)	:  user deck attacks first
+		// surge          	:  opponent deck attacks first
         else if (strcmp(argv[argIndex], "fight") == 0)
         {
             gamemode = fight;
@@ -1282,6 +1301,9 @@ int main(int argc, char** argv)
             gamemode = surge;
         }
         // Base Scoring Mode
+		// win 		: optimize win rate
+		// defense 	: optimize ??
+		// raid 	: optimize ??
         else if (strcmp(argv[argIndex], "win") == 0)
         {
             optimization_mode = OptimizationMode::winrate;
@@ -1295,6 +1317,13 @@ int main(int argc, char** argv)
             optimization_mode = OptimizationMode::raid;
         }
         // Mode Package
+		// campaign 		: optimize ??
+		// pvp 				: optimize win rate
+		// pvp-defense 		: optimize ??
+		// brawl 			: optimize ??
+		// brawl-defense	: optimize ??
+		// gw (guild war)	: optimize win rate
+		// gw-defense		: optimize ??
         else if (strcmp(argv[argIndex], "campaign") == 0)
         {
             gamemode = surge;
@@ -1331,6 +1360,48 @@ int main(int argc, char** argv)
             optimization_mode = OptimizationMode::defense;
         }
         // Others
+		// keep-commander (-c) 	: do not optimize the commander (but only structure & assault cards)		
+		// effect (-e) 			: add Battle Ground Effect (BGE) to global list of used BGEs; the selected BGE must follow the token immediately
+		// yeffect (ye)			: add Battle Ground Effect (BGE) to own list of BGEs; the selected BGE must follow the token immediately
+		// eeffect (ee)			: add Battle Ground Effect (BGE) to enemy list of BGEs; the selected BGE must follow the token immediately
+		// freeze (-F)			: ??
+		// -L 					: ??
+		// -o- 					: do not use ownedcards.txt 
+		// -o 					: use ownedcards.txt as card inventory information
+		// -o= 					: use specified file as card inventory information
+		// _ 					: set suffix for input files (example: ownedcards.txt turns into ownedcards01.txt if suffix is "01")
+		// fund					: use specified amount as salvage points (SP) to upgrade the deck during simulation
+		// random				: randomize own cards during simulation
+		// ordered (-r)			: use card order specified in own deck during simulation
+		// exact-ordered		: ??
+		// enemy:ordered		: ??
+		// enemy:exact-ordered	: ??
+		// endgame				: ??
+		// quest 				: ??
+		// threads (-t) 		: amount of CPU cores to use during simulation
+		// target 				: ??
+		// turnlimit			: ??
+		// mis 					: use amount as minimum increment of score (??)
+		// cl					: ??
+		// +ci 					: ??
+		// +hm 					: ??
+		// seed					: ??
+		// -v 					: (no output??)
+		// +v 					: (output??)
+		// vip 					: ??
+		// allow-candidates		: ??
+		// disallow-candidates	: ??
+		// disallow-recipes		: ??
+		// hand 				: ??
+		// enemy:hand 			: ??
+		// yfort (yf) 			: own fort to be used 
+		// efort (ef) 			: enemy fort to be used 
+		// sim 					: simulate with provided deck 
+		// climbex 				: ??
+		// climb 				: simulate in climb mode, updating the deck until best deck is found (with inventory and funds)
+		// reorder 				: ??
+		// debug				: ??
+		// debuguntil			: output the debug info for the first battle that min_score <= score <= max_score.
         else if (strcmp(argv[argIndex], "keep-commander") == 0 || strcmp(argv[argIndex], "-c") == 0)
         {
             opt_keep_commander = true;
@@ -1501,6 +1572,7 @@ int main(int argc, char** argv)
             opt_enemy_forts = std::string(argv[argIndex + 1]);
             argIndex += 1;
         }
+		// Simulation modes
         else if(strcmp(argv[argIndex], "sim") == 0)
         {
             opt_todo.push_back(std::make_tuple((unsigned)atoi(argv[argIndex + 1]), 0u, simulate));
@@ -1550,26 +1622,40 @@ int main(int argc, char** argv)
     Cards all_cards;
     Decks decks;
     std::unordered_map<std::string, std::string> bge_aliases;
+	
+	// load skills
     load_skills_set_xml(all_cards, "data/skills_set.xml", true);
-    for (unsigned section = 0; section <= 10; ++ section)
+	
+	// load available cards
+	for (unsigned section = 0; section <= 10; ++ section)
     {
         load_cards_xml(all_cards, "data/cards_section_" + to_string(section) + ".xml", false);
     }
-    all_cards.organize();
+	
+	// sort skills + available cards
+    all_cards.organize();	
+    
+	
+	// load available missions, raids and recipes
+	// load card abbreviations
     for (const auto & suffix: fn_suffix_list)
     {
         load_decks_xml(decks, all_cards, "data/missions" + suffix + ".xml", "data/raids" + suffix + ".xml", suffix.empty());
         load_recipes_xml(all_cards, "data/fusion_recipes_cj2" + suffix + ".xml", suffix.empty());
         read_card_abbrs(all_cards, "data/cardabbrs" + suffix + ".txt");
     }
+	// load custom decks
     for (const auto & suffix: fn_suffix_list)
     {
         load_custom_decks(decks, all_cards, "data/customdecks" + suffix + ".txt");
     }
+	// load Battle Ground Effect (BGE) aliases
     read_bge_aliases(bge_aliases, "data/bges.txt");
 
+	// set available skills (?? only skills that effect other cards ??)
     fill_skill_table();
 
+	// load own inventory
     if (opt_do_optimization and use_owned_cards)
     {
         if (opt_owned_cards_str_list.empty())
@@ -1585,6 +1671,7 @@ int main(int argc, char** argv)
         }
         for (const auto & oc_str: opt_owned_cards_str_list)
         {
+			// get details of the provided cards in the inventory
             read_owned_cards(all_cards, owned_cards, oc_str);
         }
     }
