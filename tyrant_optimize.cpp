@@ -34,12 +34,15 @@
 #include <boost/thread/barrier.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/thread.hpp>
+
+#include "battle.h"
 #include "card.h"
 #include "cards.h"
 #include "deck.h"
+#include "global.h"
+#include "hand.h"
 #include "read.h"
 #include "sim.h"
-#include "tyrant.h"
 #include "xml.h"
 
 struct Requirement
@@ -1159,12 +1162,11 @@ enum Operation {
     debuguntil,
 };
 
-std::string skill_description(const Cards& cards, const SkillSpec& s);
-
 //------------------------------------------------------------------------------
 // print possible Battle Ground Effects (BGE) to console
 //------------------------------------------------------------------------------
 extern void(*skill_table[Skill::num_skills])(Field*, CardStatus* src_status, const SkillSpec&);
+
 void print_available_effects()
 {
     std::cout << "Available effects besides activation skills:\n"
@@ -1276,18 +1278,18 @@ int main(int argc, char** argv)
         // Codec
         if (strcmp(argv[argIndex], "ext_b64") == 0)
         {
-            hash_to_ids = hash_to_ids_ext_b64;
-            encode_deck = encode_deck_ext_b64;
+            hash_to_ids = Deck::hash_to_ids_ext_b64;
+            encode_deck = Deck::encode_deck_ext_b64;
         }
         else if (strcmp(argv[argIndex], "wmt_b64") == 0)
         {
-            hash_to_ids = hash_to_ids_wmt_b64;
-            encode_deck = encode_deck_wmt_b64;
+            hash_to_ids = Deck::hash_to_ids_wmt_b64;
+            encode_deck = Deck::encode_deck_wmt_b64;
         }
         else if (strcmp(argv[argIndex], "ddd_b64") == 0)
         {
-            hash_to_ids = hash_to_ids_ddd_b64;
-            encode_deck = encode_deck_ddd_b64;
+            hash_to_ids = Deck::hash_to_ids_ddd_b64;
+            encode_deck = Deck::encode_deck_ddd_b64;
         }
         // Base Game Mode 
 		// fight (default)	:  user deck attacks first
@@ -1705,7 +1707,7 @@ int main(int argc, char** argv)
                     {
                         unsigned skill_index = 1;
                         // activation BG skill
-                        SkillSpec bg_skill{skill_id, 0, allfactions, 0, 0, Skill::no_skill, Skill::no_skill, false};
+                        SkillSpec bg_skill{skill_id, 0, Faction::allfactions, 0, 0, Skill::no_skill, Skill::no_skill, false};
                         if (skill_index < tokens.size() && boost::to_lower_copy(tokens[skill_index]) == "all")
                         {
                             bg_skill.all = true;
@@ -1877,6 +1879,7 @@ int main(int argc, char** argv)
             boost::split(tokens, opt_quest, boost::is_any_of(" -"));
             if (tokens.size() < 3)
             {
+				// expected skill-usage, skill-damage, card-usage, card-kills
                 throw std::runtime_error("Expect one of: su n skill; sd n skill; cu n faction/strcture; ck n structure");
             }
             auto type_str = boost::to_lower_copy(tokens[0]);
@@ -1924,7 +1927,7 @@ int main(int argc, char** argv)
                     }
                 }
             }
-            else if (type_str == "cs")
+            else if (type_str == "cs") //card survival
             {
                 unsigned card_id;
                 unsigned card_num;
@@ -1970,6 +1973,7 @@ int main(int argc, char** argv)
             }
             else
             {
+				// expected skill-usage, skill-damage, card-usage, card-kills
                 throw std::runtime_error("Expect one of: su n skill; sd n skill; cu n faction/strcture; ck n structure");
             }
             quest.quest_score = quest.quest_value;
@@ -2116,7 +2120,7 @@ int main(int argc, char** argv)
         std::cout << "Your Deck: " << (debug_print > 0 ? your_deck->long_description() : your_deck->medium_description()) << std::endl;
         for (const auto & bg_skill: opt_bg_skills[0])
         {
-            std::cout << "Your BG Skill: " << skill_description(all_cards, bg_skill) << std::endl;
+            std::cout << "Your BG Skill: " << skill_description(bg_skill) << std::endl;
         }
 
         for (unsigned i(0); i < enemy_decks.size(); ++i)
@@ -2125,7 +2129,7 @@ int main(int argc, char** argv)
         }
         for (const auto & bg_skill: opt_bg_skills[1])
         {
-            std::cout << "Enemy's BG Skill: " << skill_description(all_cards, bg_skill) << std::endl;
+            std::cout << "Enemy's BG Skill: " << skill_description(bg_skill) << std::endl;
         }
         for (const auto & bg_effect: opt_bg_effects)
         {

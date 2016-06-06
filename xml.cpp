@@ -11,7 +11,7 @@
 #include "card.h"
 #include "cards.h"
 #include "deck.h"
-#include "tyrant.h"
+#include "global.h"
 //---------------------- $20 cards.xml parsing ---------------------------------
 // Sets: 1 enclave; 2 nexus; 3 blight; 4 purity; 5 homeworld;
 // 6 phobos; 7 phobos aftermath; 8 awakening
@@ -43,14 +43,14 @@ Skill::Skill skill_name_to_id(const std::string & name)
     }
 }
 
-Faction skill_faction(xml_node<>* skill)
+Faction::Faction skill_faction(xml_node<>* skill)
 {
     xml_attribute<>* y(skill->first_attribute("y"));
     if (y)
     {
-        return static_cast<Faction>(atoi(y->value()));
+        return static_cast<Faction::Faction>(atoi(y->value()));
     }
-    return allfactions;
+    return Faction::allfactions;
 }
 
 unsigned node_value(xml_node<>* skill, const char* attribute, unsigned default_value = 0)
@@ -171,7 +171,7 @@ void parse_card_node(Cards& all_cards, Card* card, xml_node<>* card_node)
         { card->m_type = CardType::assault; }
     }
     if(rarity_node) { card->m_rarity = atoi(rarity_node->value()); }
-    if(type_node) { card->m_faction = static_cast<Faction>(atoi(type_node->value())); }
+    if(type_node) { card->m_faction = static_cast<Faction::Faction>(atoi(type_node->value())); }
     card->m_set = set;
 
     if (card_node->first_node("skill"))
@@ -220,6 +220,8 @@ void parse_card_node(Cards& all_cards, Card* card, xml_node<>* card_node)
     card->m_top_level_card = top_card;
 }
 
+
+// read an XML file containing card info (commanders, structures, assaults)
 void load_cards_xml(Cards & all_cards, const std::string & filename, bool do_warn_on_missing)
 {
     std::vector<char> buffer;
@@ -240,6 +242,7 @@ void load_cards_xml(Cards & all_cards, const std::string & filename, bool do_war
     }
 }
 
+// read an XML file containing skills info
 void load_skills_set_xml(Cards & all_cards, const std::string & filename, bool do_warn_on_missing)
 {
     std::vector<char> buffer;
