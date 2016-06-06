@@ -1,7 +1,6 @@
 #include "read.h"
 
 #include <boost/filesystem.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/regex.hpp>
 #include <cstring>
@@ -11,7 +10,7 @@
 #include <iostream>
 #include <exception>
 
-#include "tyrant.h"
+#include "global.h"
 #include "card.h"
 #include "cards.h"
 #include "deck.h"
@@ -33,46 +32,6 @@ static inline std::string &trim(std::string &s) {
         return ltrim(rtrim(s));
 }
 
-template<typename Iterator, typename Functor> Iterator advance_until(Iterator it, Iterator it_end, Functor f)
-{
-    while(it != it_end)
-    {
-        if(f(*it))
-        {
-            break;
-        }
-        ++it;
-    }
-    return(it);
-}
-
-// take care that "it" is 1 past current.
-template<typename Iterator, typename Functor> Iterator recede_until(Iterator it, Iterator it_beg, Functor f)
-{
-    if(it == it_beg) { return(it_beg); }
-    --it;
-    do
-    {
-        if(f(*it))
-        {
-            return(++it);
-        }
-        --it;
-    } while(it != it_beg);
-    return(it_beg);
-}
-
-template<typename Iterator, typename Functor, typename Token> Iterator read_token(Iterator it, Iterator it_end, Functor f, Token& token)
-{
-    Iterator token_start = advance_until(it, it_end, [](const char& c){return(c != ' ');});
-    Iterator token_end_after_spaces = advance_until(token_start, it_end, f);
-    if(token_start != token_end_after_spaces)
-    {
-        Iterator token_end = recede_until(token_end_after_spaces, token_start, [](const char& c){return(c != ' ');});
-        token = boost::lexical_cast<Token>(std::string{token_start, token_end});
-    }
-    return(token_end_after_spaces);
-}
 
 DeckList & normalize(DeckList & decklist)
 {
@@ -307,6 +266,12 @@ const std::pair<std::vector<unsigned>, std::map<signed, char>> string_to_ids(con
     return {card_ids, card_marks};
 }
 
+
+// read card abbreviations from XML file
+// error codes:
+// 0 -> everything fine or file does not exist
+// 2 -> file not readable
+// 3 -> error while parsing file
 unsigned read_card_abbrs(Cards& all_cards, const std::string& filename)
 {
     if(!boost::filesystem::exists(filename))
@@ -365,7 +330,9 @@ unsigned read_card_abbrs(Cards& all_cards, const std::string& filename)
 }
 
 
-// Error codes:
+// read custom decks from XML file
+// error codes:
+// 0 -> everything fine or file does not exist
 // 2 -> file not readable
 // 3 -> error while parsing file
 unsigned load_custom_decks(Decks& decks, Cards& all_cards, const std::string & filename)
@@ -452,6 +419,9 @@ void add_owned_card(Cards& all_cards, std::map<unsigned, unsigned>& owned_cards,
     }
 }
 
+
+
+// read owned cards from XML file or card list
 void read_owned_cards(Cards& all_cards, std::map<unsigned, unsigned>& owned_cards, const std::string & filename)
 {
     std::ifstream owned_file{filename};
@@ -498,6 +468,11 @@ void read_owned_cards(Cards& all_cards, std::map<unsigned, unsigned>& owned_card
     }
 }
 
+// read Battle Ground Effects (BGE) from XML file 
+// error codes:
+// 0 -> everything fine or file does not exist
+// 2 -> file not readable
+// 3 -> error while parsing file
 unsigned read_bge_aliases(std::unordered_map<std::string, std::string> & bge_aliases, const std::string& filename)
 {
     if(!boost::filesystem::exists(filename))

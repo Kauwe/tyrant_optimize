@@ -7,33 +7,18 @@
 #include <random>
 #include <set>
 #include <vector>
-#include "tyrant.h"
 #include "card.h"
-
-class Cards;
+#include "cards.h"
+#include "global.h"
 
 //---------------------- $30 Deck: a commander + a sequence of cards -----------
 // Can be shuffled.
 // Implementations: random player and raid decks, ordered player decks.
 //------------------------------------------------------------------------------
-namespace DeckStrategy
-{
-enum DeckStrategy
-{
-    random,
-    ordered,
-    exact_ordered,
-    num_deckstrategies
-};
-}
 typedef void (*DeckDecoder)(const char* hash, std::vector<unsigned>& ids);
 typedef void (*DeckEncoder)(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards);
-void hash_to_ids_wmt_b64(const char* hash, std::vector<unsigned>& ids);
-void encode_deck_wmt_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards);
-void hash_to_ids_ext_b64(const char* hash, std::vector<unsigned>& ids);
-void encode_deck_ext_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards);
-void hash_to_ids_ddd_b64(const char* hash, std::vector<unsigned>& ids);
-void encode_deck_ddd_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards);
+typedef std::map<std::string, long double> DeckList;
+
 extern DeckDecoder hash_to_ids;
 extern DeckEncoder encode_deck;
 
@@ -72,6 +57,7 @@ public:
     std::vector<unsigned> given_hand;
     std::vector<const Card*> fort_cards;
 
+	// constructor
     Deck(
         const Cards& all_cards_,
         DeckType::DeckType decktype_ = DeckType::deck,
@@ -94,26 +80,15 @@ public:
     {
     }
 
+	// destructor
     ~Deck() {}
 
-    void set(
-        const Card* commander_,
-        unsigned commander_max_level_,
-        const std::vector<const Card*>& cards_,
-        std::vector<std::tuple<unsigned, unsigned, std::vector<const Card*>>> variable_cards_ = {},
-        unsigned mission_req_ = 0)
-    {
-        commander = commander_;
-        commander_max_level = commander_max_level_;
-        cards = std::vector<const Card*>(std::begin(cards_), std::end(cards_));
-        variable_cards = variable_cards_;
-        deck_size = cards.size();
-        for (const auto & pool: variable_cards)
-        {
-            deck_size += std::get<0>(pool) * std::get<1>(pool);
-        }
-        mission_req = mission_req_;
-    }
+	void set(
+		const Card* commander_,
+		unsigned commander_max_level_,
+		const std::vector<const Card*>& cards_,
+		std::vector<std::tuple<unsigned, unsigned, std::vector<const Card*>>> variable_cards_ = {},
+		unsigned mission_req_ = 0);
 
     void set(const std::vector<unsigned>& ids, const std::map<signed, char> &marks);
     void set(const std::vector<unsigned>& ids)
@@ -140,9 +115,18 @@ public:
     const Card* upgrade_card(const Card* card, unsigned card_max_level, std::mt19937& re, unsigned &remaining_upgrade_points, unsigned &remaining_upgrade_opportunities);
     void shuffle(std::mt19937& re);
     void place_at_bottom(const Card* card);
+
+	//static functions
+	static void hash_to_ids_wmt_b64(const char* hash, std::vector<unsigned>& ids);
+	static void encode_deck_wmt_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards);
+	static void hash_to_ids_ext_b64(const char* hash, std::vector<unsigned>& ids);
+	static void encode_deck_ext_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards);
+	static void hash_to_ids_ddd_b64(const char* hash, std::vector<unsigned>& ids);
+	static void encode_deck_ddd_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards);
 };
 
-typedef std::map<std::string, long double> DeckList;
+
+// could be moved into own file at some point
 class Decks
 {
 public:

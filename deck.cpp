@@ -10,228 +10,213 @@
 
 #include "card.h"
 #include "cards.h"
+#include "global.h"
 #include "read.h"
 
-template<class RandomAccessIterator, class UniformRandomNumberGenerator>
-void partial_shuffle(RandomAccessIterator first, RandomAccessIterator middle,
-                     RandomAccessIterator last,
-                     UniformRandomNumberGenerator&& g)
-{
-    typedef typename std::iterator_traits<RandomAccessIterator>::difference_type diff_t;
-    typedef typename std::make_unsigned<diff_t>::type udiff_t;
-    typedef typename std::uniform_int_distribution<udiff_t> distr_t;
-    typedef typename distr_t::param_type param_t;
+DeckDecoder hash_to_ids = Deck::hash_to_ids_ext_b64;
+DeckEncoder encode_deck = Deck::encode_deck_ext_b64;
 
-    distr_t D;
-    diff_t m = middle - first;
-    diff_t n = last - first;
-    for (diff_t i = 0; i < m; ++i)
-    {
-        std::swap(first[i], first[D(g, param_t(i, n-1))]);
-    }
-}
 
-//------------------------------------------------------------------------------
-const char* base64_chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    "abcdefghijklmnopqrstuvwxyz"
-    "0123456789+/";
-const char* wmt_b64_magic_chars = "-.~!*";
+//--------------------------------------
+// class Deck
+//--------------------------------------
 
 // Converts cards in `hash' to a deck.
 // Stores resulting card IDs in `ids'.
-void hash_to_ids_wmt_b64(const char* hash, std::vector<unsigned>& ids)
+void Deck::hash_to_ids_wmt_b64(const char* hash, std::vector<unsigned>& ids)
 {
-    unsigned int last_id = 0;
-    const char* pc = hash;
+	unsigned int last_id = 0;
+	const char* pc = hash;
 
-    while(*pc)
-    {
-        unsigned id_plus = 0;
-        const char* pmagic = strchr(wmt_b64_magic_chars, *pc);
-        if(pmagic)
-        {
-            ++ pc;
-            id_plus = 4000 * (pmagic - wmt_b64_magic_chars + 1);
-        }
-        if(!*pc || !*(pc + 1))
-        {
-            throw std::runtime_error("Invalid hash length");
-        }
-        const char* p0 = strchr(base64_chars, *pc);
-        const char* p1 = strchr(base64_chars, *(pc + 1));
-        if (!p0 || !p1)
-        {
-            throw std::runtime_error("Invalid hash character");
-        }
-        pc += 2;
-        size_t index0 = p0 - base64_chars;
-        size_t index1 = p1 - base64_chars;
-        unsigned int id = (index0 << 6) + index1;
+	while (*pc)
+	{
+		unsigned id_plus = 0;
+		const char* pmagic = strchr(wmt_b64_magic_chars, *pc);
+		if (pmagic)
+		{
+			++pc;
+			id_plus = 4000 * (pmagic - wmt_b64_magic_chars + 1);
+		}
+		if (!*pc || !*(pc + 1))
+		{
+			throw std::runtime_error("Invalid hash length");
+		}
+		const char* p0 = strchr(base64_chars, *pc);
+		const char* p1 = strchr(base64_chars, *(pc + 1));
+		if (!p0 || !p1)
+		{
+			throw std::runtime_error("Invalid hash character");
+		}
+		pc += 2;
+		size_t index0 = p0 - base64_chars;
+		size_t index1 = p1 - base64_chars;
+		unsigned int id = (index0 << 6) + index1;
 
-        if (id < 4001)
-        {
-            id += id_plus;
-            ids.push_back(id);
-            last_id = id;
-        }
-        else for (unsigned int j = 0; j < id - 4001; ++j)
-        {
-            ids.push_back(last_id);
-        }
-    }
+		if (id < 4001)
+		{
+			id += id_plus;
+			ids.push_back(id);
+			last_id = id;
+		}
+		else for (unsigned int j = 0; j < id - 4001; ++j)
+		{
+			ids.push_back(last_id);
+		}
+	}
 }
 
-void encode_id_wmt_b64(std::stringstream &ios, unsigned card_id)
+
+
+void Deck::encode_deck_wmt_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards)
 {
-    if(card_id > 4000)
-    {
-        ios << wmt_b64_magic_chars[(card_id - 1) / 4000 - 1];
-        card_id = (card_id - 1) % 4000 + 1;
-    }
-    ios << base64_chars[card_id / 64];
-    ios << base64_chars[card_id % 64];
+	if (commander)
+	{
+		Card::encode_id_wmt_b64(ios, commander->m_id);
+	}
+	unsigned last_id = 0;
+	unsigned num_repeat = 0;
+	for (const Card* card : cards)
+	{
+		auto card_id = card->m_id;
+		if (card_id == last_id)
+		{
+			++num_repeat;
+		}
+		else
+		{
+			if (num_repeat > 1)
+			{
+				ios << base64_chars[(num_repeat + 4000) / 64];
+				ios << base64_chars[(num_repeat + 4000) % 64];
+			}
+			last_id = card_id;
+			num_repeat = 1;
+			Card::encode_id_wmt_b64(ios, card_id);
+		}
+	}
+	if (num_repeat > 1)
+	{
+		ios << base64_chars[(num_repeat + 4000) / 64];
+		ios << base64_chars[(num_repeat + 4000) % 64];
+	}
 }
 
-void encode_deck_wmt_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards)
+void Deck::hash_to_ids_ext_b64(const char* hash, std::vector<unsigned>& ids)
 {
-    if (commander)
-    {
-        encode_id_wmt_b64(ios, commander->m_id);
-    }
-    unsigned last_id = 0;
-    unsigned num_repeat = 0;
-    for(const Card* card: cards)
-    {
-        auto card_id = card->m_id;
-        if(card_id == last_id)
-        {
-            ++ num_repeat;
-        }
-        else
-        {
-            if(num_repeat > 1)
-            {
-                ios << base64_chars[(num_repeat + 4000) / 64];
-                ios << base64_chars[(num_repeat + 4000) % 64];
-            }
-            last_id = card_id;
-            num_repeat = 1;
-            encode_id_wmt_b64(ios, card_id);
-        }
-    }
-    if(num_repeat > 1)
-    {
-        ios << base64_chars[(num_repeat + 4000) / 64];
-        ios << base64_chars[(num_repeat + 4000) % 64];
-    }
+	const char* pc = hash;
+	while (*pc)
+	{
+		unsigned id = 0;
+		unsigned factor = 1;
+		const char* p = strchr(base64_chars, *pc);
+		if (!p)
+		{
+			throw std::runtime_error("Invalid hash character");
+		}
+		size_t d = p - base64_chars;
+		while (d < 32)
+		{
+			id += factor * d;
+			factor *= 32;
+			++pc;
+			p = strchr(base64_chars, *pc);
+			if (!p)
+			{
+				throw std::runtime_error("Invalid hash character");
+			}
+			d = p - base64_chars;
+		}
+		id += factor * (d - 32);
+		++pc;
+		ids.push_back(id);
+	}
 }
 
-void hash_to_ids_ext_b64(const char* hash, std::vector<unsigned>& ids)
+
+void Deck::encode_deck_ext_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards)
 {
-    const char* pc = hash;
-    while (*pc)
-    {
-        unsigned id = 0;
-        unsigned factor = 1;
-        const char* p = strchr(base64_chars, *pc);
-        if (!p)
-        { throw std::runtime_error("Invalid hash character"); }
-        size_t d = p - base64_chars;
-        while (d < 32)
-        {
-            id += factor * d;
-            factor *= 32;
-            ++ pc;
-            p = strchr(base64_chars, *pc);
-            if (!p)
-            { throw std::runtime_error("Invalid hash character"); }
-            d = p - base64_chars;
-        }
-        id += factor * (d - 32);
-        ++ pc;
-        ids.push_back(id);
-    }
+	if (commander)
+	{
+		Card::encode_id_ext_b64(ios, commander->m_id);
+	}
+	for (const Card* card : cards)
+	{
+		Card::encode_id_ext_b64(ios, card->m_id);
+	}
 }
 
-void encode_id_ext_b64(std::stringstream &ios, unsigned card_id)
+void Deck::hash_to_ids_ddd_b64(const char* hash, std::vector<unsigned>& ids)
 {
-    while (card_id >= 32)
-    {
-        ios << base64_chars[card_id % 32];
-        card_id /= 32;
-    }
-    ios << base64_chars[card_id + 32];
+	const char* pc = hash;
+	while (*pc)
+	{
+		if (!*pc || !*(pc + 1) || !*(pc + 2))
+		{
+			throw std::runtime_error("Invalid hash length");
+		}
+		const char* p0 = strchr(base64_chars, *pc);
+		const char* p1 = strchr(base64_chars, *(pc + 1));
+		const char* p2 = strchr(base64_chars, *(pc + 2));
+		if (!p0 || !p1 || !p2)
+		{
+			throw std::runtime_error("Invalid hash character");
+		}
+		pc += 3;
+		size_t index0 = p0 - base64_chars;
+		size_t index1 = p1 - base64_chars;
+		size_t index2 = p2 - base64_chars;
+		unsigned int id = (index0 << 12) + (index1 << 6) + index2;
+		ids.push_back(id);
+	}
 }
 
-void encode_deck_ext_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards)
+
+void Deck::encode_deck_ddd_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards)
 {
-    if (commander)
-    {
-        encode_id_ext_b64(ios, commander->m_id);
-    }
-    for (const Card* card: cards)
-    {
-        encode_id_ext_b64(ios, card->m_id);
-    }
+	if (commander)
+	{
+		Card::encode_id_ddd_b64(ios, commander->m_id);
+	}
+	for (const Card* card : cards)
+	{
+		Card::encode_id_ddd_b64(ios, card->m_id);
+	}
 }
 
-void hash_to_ids_ddd_b64(const char* hash, std::vector<unsigned>& ids)
+
+// set the deck with a specified commander card
+void Deck::set(
+	const Card* commander_,
+	unsigned commander_max_level_,
+	const std::vector<const Card*>& cards_,
+	std::vector<std::tuple<unsigned, unsigned, std::vector<const Card*>>> variable_cards_,
+	unsigned mission_req_)
 {
-    const char* pc = hash;
-    while(*pc)
-    {
-        if(!*pc || !*(pc + 1) || !*(pc + 2))
-        {
-            throw std::runtime_error("Invalid hash length");
-        }
-        const char* p0 = strchr(base64_chars, *pc);
-        const char* p1 = strchr(base64_chars, *(pc + 1));
-        const char* p2 = strchr(base64_chars, *(pc + 2));
-        if (!p0 || !p1 || !p2)
-        {
-            throw std::runtime_error("Invalid hash character");
-        }
-        pc += 3;
-        size_t index0 = p0 - base64_chars;
-        size_t index1 = p1 - base64_chars;
-        size_t index2 = p2 - base64_chars;
-        unsigned int id = (index0 << 12) + (index1 << 6) + index2;
-        ids.push_back(id);
-    }
+	commander = commander_;
+	commander_max_level = commander_max_level_;
+	cards = std::vector<const Card*>(std::begin(cards_), std::end(cards_));
+	variable_cards = variable_cards_;
+	deck_size = cards.size();
+	for (const auto & pool : variable_cards)
+	{
+		deck_size += std::get<0>(pool) * std::get<1>(pool);
+	}
+	mission_req = mission_req_;
 }
 
-void encode_id_ddd_b64(std::stringstream &ios, unsigned card_id)
-{
-    ios << base64_chars[card_id / 4096];
-    ios << base64_chars[card_id % 4096 / 64];
-    ios << base64_chars[card_id % 64];
-}
 
-void encode_deck_ddd_b64(std::stringstream &ios, const Card* commander, std::vector<const Card*> cards)
-{
-    if (commander)
-    {
-        encode_id_ddd_b64(ios, commander->m_id);
-    }
-    for (const Card* card: cards)
-    {
-        encode_id_ddd_b64(ios, card->m_id);
-    }
-}
-
-DeckDecoder hash_to_ids = hash_to_ids_ext_b64;
-DeckEncoder encode_deck = encode_deck_ext_b64;
-
-namespace range = boost::range;
-
+// set the deck from all cards given
 void Deck::set(const std::vector<unsigned>& ids, const std::map<signed, char> &marks)
 {
     commander = nullptr;
     strategy = DeckStrategy::random;
+
     for(auto id: ids)
     {
         const Card* card{all_cards.by_id(id)};
+
+		// take first commander card as deck commander
+		// -> any further commander will be ignored
         if(card->m_type == CardType::commander)
         {
             if (commander == nullptr)
@@ -245,13 +230,16 @@ void Deck::set(const std::vector<unsigned>& ids, const std::map<signed, char> &m
         }
         else
         {
+			//move card to last slot in deck
             cards.emplace_back(card);
         }
     }
+
     if (commander == nullptr)
     {
         throw std::runtime_error("While constructing a deck: no commander found");
     }
+
     commander_max_level = commander->m_top_level_card->m_level;
     deck_size = cards.size();
     card_marks = marks;
@@ -392,7 +380,6 @@ std::string Deck::medium_description() const
     return ios.str();
 }
 
-extern std::string card_description(const Cards& all_cards, const Card* c);
 
 std::string Deck::long_description() const
 {
@@ -431,7 +418,7 @@ std::string Deck::long_description() const
 
 void Deck::show_upgrades(std::stringstream &ios, const Card* card, unsigned card_max_level, const char * leading_chars) const
 {
-    ios << leading_chars << card_description(all_cards, card) << "\n";
+    ios << leading_chars << card->card_description() << "\n";
     if (upgrade_points == 0 || card->m_level == card_max_level)
     {
         return;
@@ -440,7 +427,7 @@ void Deck::show_upgrades(std::stringstream &ios, const Card* card, unsigned card
     {
         while (card->m_level != card_max_level)
         { card = card->upgraded(); }
-        ios << leading_chars << "-> " << card_description(all_cards, card) << "\n";
+        ios << leading_chars << "-> " << card->card_description() << "\n";
         return;
     }
     // nCm * p^m / q^(n-m)
@@ -455,7 +442,7 @@ void Deck::show_upgrades(std::stringstream &ios, const Card* card, unsigned card
         card = card->upgraded();
         ++m;
         prob = prob * (n + 1 - m) / m * p / q;
-        ios << leading_chars << std::setw(5) << prob << "% -> " << card_description(all_cards, card) << "\n";
+        ios << leading_chars << std::setw(5) << prob << "% -> " << card->card_description() << "\n";
     }
 }
 
@@ -610,6 +597,13 @@ void Deck::place_at_bottom(const Card* card)
     shuffled_cards.push_back(card);
 }
 
+
+
+
+
+//--------------------------------------
+// class Decks
+//--------------------------------------
 void Decks::add_deck(Deck* deck, const std::string& deck_name)
 {
     by_name[deck_name] = deck;
